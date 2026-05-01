@@ -1,0 +1,149 @@
+// prisma/schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  Customer
+  Admin
+  DeliveryPartner
+}
+
+enum OrderStatus {
+  available
+  confirmed
+  arriving
+  delivered
+  cancelled
+}
+
+model Category {
+  id       Int       @id @default(autoincrement())
+  name     String
+  image    String
+  products Product[]
+}
+
+model Product {
+  id            Int         @id @default(autoincrement())
+  name          String
+  image         String
+  price         Float
+  discountPrice Float?
+  quantity      String
+  categoryId    Int
+  category      Category    @relation(fields: [categoryId], references: [id])
+  orderItems    OrderItem[]
+}
+
+model Branch {
+  id               Int               @id @default(autoincrement())
+  name             String
+  latitude         Float?
+  longitude        Float?
+  address          String?
+  deliveryPartners DeliveryPartner[]
+  orders           Order[]
+}
+
+model Customer {
+  id          Int     @id @default(autoincrement())
+  name        String?
+  role        Role    @default(Customer)
+  isActivated Boolean @default(false)
+  // Phone numbers can be larger than 32-bit integers (e.g. 9876543210).
+  // Store as String to avoid out-of-range errors and preserve leading zeros if any.
+  phone       String  @unique
+  latitude    Float?
+  longitude   Float?
+  address     String?
+  orders      Order[]
+}
+
+model Admin {
+  id          Int     @id @default(autoincrement())
+  name        String?
+  role        Role    @default(Admin)
+  isActivated Boolean @default(false)
+  email       String  @unique
+  password    String
+}
+
+model DeliveryPartner {
+  id          Int     @id @default(autoincrement())
+  name        String?
+  role        Role    @default(DeliveryPartner)
+  isActivated Boolean @default(false)
+  email       String  @unique
+  password    String
+  // Use String for phone here as well for consistency with Customer.
+  phone       String
+  latitude    Float?
+  longitude   Float?
+  address     String?
+  branchId    Int?
+  branch      Branch? @relation(fields: [branchId], references: [id])
+  orders      Order[]
+}
+
+// Replaces the Counter model + getNextSequenceValue logic
+// Prisma handles auto-increment natively — no counter needed
+model Order {
+  id          Int         @id @default(autoincrement())
+  orderId     String?     @unique  // e.g. "ORDR00001" — set in app logic
+
+  customerId  Int
+  customer    Customer    @relation(fields: [customerId], references: [id])
+
+  deliveryPartnerId Int?
+  deliveryPartner   DeliveryPartner? @relation(fields: [deliveryPartnerId], references: [id])
+
+  branchId    Int
+  branch      Branch      @relation(fields: [branchId], references: [id])
+
+  // deliveryLocation (flattened)
+  deliveryLatitude  Float
+  deliveryLongitude Float
+  deliveryAddress   String?
+
+  // pickupLocation (flattened)
+  pickupLatitude    Float
+  pickupLongitude   Float
+  pickupAddress     String?
+
+  // deliveryPersonLocation (flattened)
+  dpLatitude        Float?
+  dpLongitude       Float?
+  dpAddress         String?
+
+  status      OrderStatus @default(available)
+  totalPrice  Float
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  items       OrderItem[]
+}
+
+// Replaces the embedded items array in orderSchema
+model OrderItem {
+  id        Int     @id @default(autoincrement())
+  orderId   Int
+  order     Order   @relation(fields: [orderId], references: [id])
+  productId Int
+  product   Product @relation(fields: [productId], references: [id])
+  count     Int
+}
+
+// Counter is no longer needed as a table — but keep if you want
+// custom orderId generation outside Prisma
+model Counter {
+  id             Int    @id @default(autoincrement())
+  name           String @unique
+  sequence_value Int    @default(0)
+}
